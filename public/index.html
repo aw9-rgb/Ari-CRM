@@ -94,7 +94,7 @@
   const DOW = ['S','M','T','W','T','F','S'];
 
   let state = {
-    contacts: [], tasks: [], history: [], pipeline: [],
+    contacts: [], tasks: [], history: [], pipeline: [], links: [],
     tab: 'today', filterTag: 'all', modal: null,
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
     calSelected: null,
@@ -135,8 +135,9 @@
       state.tasks = data.tasks || [];
       state.history = data.history || [];
       state.pipeline = data.pipeline || [];
+      state.links = data.links || [];
     } catch (err) {
-      state.contacts = []; state.tasks = []; state.history = []; state.pipeline = [];
+      state.contacts = []; state.tasks = []; state.history = []; state.pipeline = []; state.links = [];
     }
   }
   async function saveAll() {
@@ -144,7 +145,7 @@
       await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contacts: state.contacts, tasks: state.tasks, history: state.history, pipeline: state.pipeline })
+        body: JSON.stringify({ contacts: state.contacts, tasks: state.tasks, history: state.history, pipeline: state.pipeline, links: state.links })
       });
     } catch (err) { console.error('save failed', err); }
   }
@@ -208,8 +209,8 @@
     const sortedContacts = filteredContacts.slice().sort((a,b) => (a.firstName+a.lastName).localeCompare(b.firstName+b.lastName));
 
     let html = '<div class="crm-tabs">';
-    ['today','pipeline','contacts','calendar','history'].forEach(t => {
-      const label = t === 'today' ? 'Today' : t === 'pipeline' ? 'Active Pipeline' : t === 'contacts' ? 'Contacts' : t === 'calendar' ? 'Calendar' : 'History';
+    ['today','pipeline','contacts','calendar','links','history'].forEach(t => {
+      const label = t === 'today' ? 'Today' : t === 'pipeline' ? 'Active Pipeline' : t === 'contacts' ? 'Contacts' : t === 'calendar' ? 'Calendar' : t === 'links' ? 'Links' : 'History';
       html += '<button class="crm-tab' + (state.tab===t?' active':'') + '" data-tab="' + t + '">' + label + '</button>';
     });
     html += '</div><div class="crm-body">';
@@ -293,6 +294,26 @@
 
     if (state.tab === 'calendar') {
       html += renderCalendar();
+    }
+
+    if (state.tab === 'links') {
+      html += '<div class="crm-taskrow"><input type="text" id="new-link-input" placeholder="Paste a link or note" value="' + esc(state.newLinkDraft || '') + '" style="flex:1"/>' +
+        '<button class="crm-btn crm-btn-primary" id="add-link-btn">Add</button></div>';
+      if (state.links.length === 0) html += '<div class="crm-empty">No links saved yet.</div>';
+      state.links.forEach((l, i) => {
+        if (state.editingLinkId === l.id) {
+          html += '<div class="crm-card" data-link-id="' + l.id + '"><div class="crm-taskrow">' +
+            '<input type="text" id="edit-link-input" value="' + esc(state.editLinkDraft != null ? state.editLinkDraft : l.text) + '" style="flex:1"/>' +
+            '<button class="crm-btn crm-btn-primary" data-save-link="' + l.id + '">Save</button>' +
+            '<button class="crm-btn" data-cancel-link="1">Cancel</button>' +
+            '</div></div>';
+        } else {
+          html += '<div class="crm-card" data-link-id="' + l.id + '"><div class="crm-row">' +
+            '<div style="flex:1"><div class="crm-name">#' + (i+1) + '</div><div class="crm-sub" style="word-break:break-all">' + esc(l.text) + '</div></div>' +
+            '<div style="display:flex;gap:6px"><button class="crm-btn" data-edit-link="' + l.id + '">Edit</button><button class="crm-close" data-delete-link="' + l.id + '">&times;</button></div>' +
+            '</div></div>';
+        }
+      });
     }
 
     if (state.tab === 'history') {
@@ -787,6 +808,46 @@
       await saveAll();
       render();
     };
+    const linkInput = document.getElementById('new-link-input');
+    if (linkInput) linkInput.oninput = () => { state.newLinkDraft = linkInput.value; };
+    const addLinkBtn = document.getElementById('add-link-btn');
+    if (addLinkBtn) addLinkBtn.onclick = async () => {
+      const val = (state.newLinkDraft || '').trim();
+      if (!val) return;
+      state.links.push({ id: uid(), text: val });
+      state.newLinkDraft = '';
+      await saveAll();
+      render();
+    };
+    document.querySelectorAll('[data-edit-link]').forEach(el => el.onclick = () => {
+      state.editingLinkId = el.getAttribute('data-edit-link');
+      state.editLinkDraft = null;
+      render();
+    });
+    document.querySelectorAll('[data-cancel-link]').forEach(el => el.onclick = () => {
+      state.editingLinkId = null;
+      state.editLinkDraft = null;
+      render();
+    });
+    const editLinkInput = document.getElementById('edit-link-input');
+    if (editLinkInput) editLinkInput.oninput = () => { state.editLinkDraft = editLinkInput.value; };
+    document.querySelectorAll('[data-save-link]').forEach(el => el.onclick = async () => {
+      const id = el.getAttribute('data-save-link');
+      const val = (state.editLinkDraft != null ? state.editLinkDraft : '').trim();
+      if (!val) return;
+      state.links = state.links.map(l => l.id === id ? { ...l, text: val } : l);
+      state.editingLinkId = null;
+      state.editLinkDraft = null;
+      await saveAll();
+      render();
+    });
+    document.querySelectorAll('[data-delete-link]').forEach(el => el.onclick = async () => {
+      const id = el.getAttribute('data-delete-link');
+      state.links = state.links.filter(l => l.id !== id);
+      await saveAll();
+      render();
+    });
+
     document.querySelectorAll('[data-toggle-task]').forEach(el => el.onclick = async () => {
       const id = el.getAttribute('data-toggle-task');
       state.tasks = state.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
