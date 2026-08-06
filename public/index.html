@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Callback CRM</title>
+<title>SimplePlan</title>
 <link rel="manifest" href="/manifest.json"/>
-<meta name="theme-color" content="#0f6e56"/>
+<meta name="theme-color" content="#1a5fb4"/>
 <link rel="apple-touch-icon" href="/icon-192.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
@@ -24,7 +24,7 @@
   .crm-root h1, .crm-root h2, .crm-root h3 { font-weight: 500; margin: 0; }
   .crm-tabs { display: flex; border-bottom: 1px solid #e3ddd0; background: #faf8f4; position: sticky; top: 0; z-index: 5; }
   .crm-tab { flex: 1; padding: 14px 2px; text-align: center; font-size: 13px; font-weight: 500; color: #8a8578; border: none; background: none; border-bottom: 2px solid transparent; cursor: pointer; }
-  .crm-tab.active { color: #0f6e56; border-bottom: 2px solid #0f6e56; }
+  .crm-tab.active { color: #1a5fb4; border-bottom: 2px solid #1a5fb4; }
   .crm-body { padding: 1rem; }
   .crm-empty { text-align: center; color: #8a8578; padding: 2.5rem 1rem; font-size: 14px; }
   .crm-card { background: #ffffff; border: 1px solid #e3ddd0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
@@ -45,8 +45,8 @@
   .crm-method { font-size: 12px; color: #5f5e5a; }
   .crm-btn { border: 1px solid #cfc9ba; background: #ffffff; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; color: #2c2c2a; }
   .crm-btn:active { transform: scale(0.98); }
-  .crm-btn-primary { background: #0f6e56; color: #ffffff; border-color: #0f6e56; }
-  .crm-fab { width: 100%; padding: 12px; border-radius: 10px; background: #0f6e56; color: #fff; border: none; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 1rem; }
+  .crm-btn-primary { background: #1a5fb4; color: #ffffff; border-color: #1a5fb4; }
+  .crm-fab { width: 100%; padding: 12px; border-radius: 10px; background: #1a5fb4; color: #fff; border: none; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 1rem; }
   .crm-field { margin-bottom: 12px; }
   .crm-field label { display: block; font-size: 12px; color: #5f5e5a; margin-bottom: 4px; font-weight: 500; }
   .crm-field input, .crm-field select, .crm-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 14px; background: #ffffff; color: #2c2c2a; font-family: inherit; resize: vertical; }
@@ -70,9 +70,9 @@
   .cal-dow { text-align: center; font-size: 11px; color: #8a8578; font-weight: 500; }
   .cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid transparent; background: #ffffff; }
   .cal-day.empty { background: none; cursor: default; }
-  .cal-day.selected { border-color: #0f6e56; background: #e1f5ee; }
-  .cal-day.today { font-weight: 500; color: #0f6e56; }
-  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: #0f6e56; margin-top: 2px; }
+  .cal-day.selected { border-color: #1a5fb4; background: #e3edfa; }
+  .cal-day.today { font-weight: 500; color: #1a5fb4; }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: #1a5fb4; margin-top: 2px; }
   .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 </style>
 </head>
@@ -276,7 +276,7 @@
       html += '<div class="crm-filters">';
       ['all','realtor','client','other'].forEach(tg => {
         const active = state.filterTag === tg;
-        html += '<button class="crm-btn" data-filter="' + tg + '" style="' + (active ? 'background:#0f6e56;color:#fff;border-color:#0f6e56' : '') + '">' + (tg === 'all' ? 'All' : TAG_LABELS[tg]) + '</button>';
+        html += '<button class="crm-btn" data-filter="' + tg + '" style="' + (active ? 'background:#1a5fb4;color:#fff;border-color:#1a5fb4' : '') + '">' + (tg === 'all' ? 'All' : TAG_LABELS[tg]) + '</button>';
       });
       html += '</div>';
       if (sortedContacts.length === 0) html += '<div class="crm-empty">No contacts yet. Add your first one above.</div>';
@@ -315,7 +315,7 @@
         } else {
           html += '<div class="crm-card" data-link-id="' + l.id + '"><div class="crm-row">' +
             '<div style="flex:1"><div class="crm-name">#' + (i+1) + ' ' + esc(l.name) + '</div>' +
-            '<div class="crm-sub" style="word-break:break-all"><a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="color:#0f6e56">' + esc(l.url) + '</a></div></div>' +
+            '<div class="crm-sub" style="word-break:break-all"><a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="color:#1a5fb4">' + esc(l.url) + '</a></div></div>' +
             '<div style="display:flex;gap:6px"><button class="crm-btn" data-edit-link="' + l.id + '">Edit</button><button class="crm-close" data-delete-link="' + l.id + '">&times;</button></div>' +
             '</div></div>';
         }
