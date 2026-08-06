@@ -98,7 +98,8 @@
     tab: 'today', filterTag: 'all', modal: null,
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
     calSelected: null,
-    notifStatus: 'unknown'
+    notifStatus: 'unknown',
+    contactSearch: ''
   };
 
   function todayStr() {
@@ -200,12 +201,24 @@
   }
 
   function render() {
+    const active = document.activeElement;
+    const activeId = active && active.id;
+    const activeSelStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
     const root = document.getElementById('crm-root');
     const today = todayStr();
     const dueToday = state.contacts.filter(c => c.callbackDate && c.callbackDate <= today).sort((a,b) => (a.callbackTime||'99:99').localeCompare(b.callbackTime||'99:99'));
     const taskDueToday = state.tasks.filter(t => !t.done && (!t.date || t.date <= today)).sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99'));
     const doneTasks = state.tasks.filter(t => t.done);
-    const filteredContacts = state.filterTag === 'all' ? state.contacts : state.contacts.filter(c => c.tag === state.filterTag);
+    const tagFiltered = state.filterTag === 'all' ? state.contacts : state.contacts.filter(c => c.tag === state.filterTag);
+    const searchQuery = (state.contactSearch || '').trim().toLowerCase();
+    const filteredContacts = !searchQuery ? tagFiltered : tagFiltered.filter(c => {
+      const name = ((c.firstName||'') + ' ' + (c.lastName||'')).toLowerCase();
+      const phoneDigits = String(c.phone || '').replace(/\D/g, '');
+      const queryDigits = searchQuery.replace(/\D/g, '');
+      const email = (c.email || '').toLowerCase();
+      const notes = (c.notes || '').toLowerCase();
+      return name.includes(searchQuery) || (queryDigits && phoneDigits.includes(queryDigits)) || email.includes(searchQuery) || notes.includes(searchQuery);
+    });
     const sortedContacts = filteredContacts.slice().sort((a,b) => (a.firstName+a.lastName).localeCompare(b.firstName+b.lastName));
 
     let html = '<div class="crm-tabs">';
@@ -273,6 +286,7 @@
         '<button class="crm-btn crm-btn-primary" id="open-add-contact" style="flex:2">+ Add contact</button>' +
         '<button class="crm-btn" id="export-contacts-btn" style="flex:1">Export to Excel</button>' +
         '</div>';
+      html += '<div class="crm-field"><input type="text" id="contact-search" placeholder="Search name, phone, email, notes..." value="' + esc(state.contactSearch || '') + '"/></div>';
       html += '<div class="crm-filters">';
       ['all','realtor','client','other'].forEach(tg => {
         const active = state.filterTag === tg;
@@ -343,6 +357,15 @@
 
     root.innerHTML = html;
     attachHandlers();
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) {
+        el.focus();
+        if (activeSelStart != null && el.setSelectionRange) {
+          try { el.setSelectionRange(activeSelStart, activeSelStart); } catch (e) {}
+        }
+      }
+    }
   }
 
   function renderCalendar() {
@@ -628,6 +651,8 @@
     wirePhoneAutoFormat('df-phone');
     document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { state.tab = el.getAttribute('data-tab'); render(); });
     document.querySelectorAll('[data-filter]').forEach(el => el.onclick = () => { state.filterTag = el.getAttribute('data-filter'); render(); });
+    const contactSearchInput = document.getElementById('contact-search');
+    if (contactSearchInput) contactSearchInput.oninput = () => { state.contactSearch = contactSearchInput.value; render(); };
 
     const enableBtn = document.getElementById('enable-notif-btn');
     if (enableBtn) enableBtn.onclick = enableNotifications;
