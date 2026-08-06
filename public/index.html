@@ -297,19 +297,25 @@
     }
 
     if (state.tab === 'links') {
-      html += '<div class="crm-taskrow"><input type="text" id="new-link-input" placeholder="Paste a link or note" value="' + esc(state.newLinkDraft || '') + '" style="flex:1"/>' +
-        '<button class="crm-btn crm-btn-primary" id="add-link-btn">Add</button></div>';
+      const lnd = state.linkDraft || {};
+      html += '<div class="crm-card">' +
+        field('Name', 'text', 'lf-name', esc(lnd.name || ''), 'Pricing engine') +
+        field('Link', 'url', 'lf-url', esc(lnd.url || ''), 'https://...') +
+        '<button class="crm-btn crm-btn-primary" id="add-link-btn" style="width:100%">Add link</button>' +
+        '</div>';
       if (state.links.length === 0) html += '<div class="crm-empty">No links saved yet.</div>';
       state.links.forEach((l, i) => {
         if (state.editingLinkId === l.id) {
-          html += '<div class="crm-card" data-link-id="' + l.id + '"><div class="crm-taskrow">' +
-            '<input type="text" id="edit-link-input" value="' + esc(state.editLinkDraft != null ? state.editLinkDraft : l.text) + '" style="flex:1"/>' +
-            '<button class="crm-btn crm-btn-primary" data-save-link="' + l.id + '">Save</button>' +
-            '<button class="crm-btn" data-cancel-link="1">Cancel</button>' +
-            '</div></div>';
+          const ed = state.editLinkDraft || { name: l.name, url: l.url };
+          html += '<div class="crm-card" data-link-id="' + l.id + '">' +
+            field('Name', 'text', 'el-name', esc(ed.name || ''), 'Pricing engine') +
+            field('Link', 'url', 'el-url', esc(ed.url || ''), 'https://...') +
+            '<div class="crm-actions"><button class="crm-btn" data-cancel-link="1">Cancel</button><button class="crm-btn crm-btn-primary" data-save-link="' + l.id + '">Save</button></div>' +
+            '</div>';
         } else {
           html += '<div class="crm-card" data-link-id="' + l.id + '"><div class="crm-row">' +
-            '<div style="flex:1"><div class="crm-name">#' + (i+1) + '</div><div class="crm-sub" style="word-break:break-all">' + esc(l.text) + '</div></div>' +
+            '<div style="flex:1"><div class="crm-name">#' + (i+1) + ' ' + esc(l.name) + '</div>' +
+            '<div class="crm-sub" style="word-break:break-all"><a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="color:#0f6e56">' + esc(l.url) + '</a></div></div>' +
             '<div style="display:flex;gap:6px"><button class="crm-btn" data-edit-link="' + l.id + '">Edit</button><button class="crm-close" data-delete-link="' + l.id + '">&times;</button></div>' +
             '</div></div>';
         }
@@ -808,14 +814,17 @@
       await saveAll();
       render();
     };
-    const linkInput = document.getElementById('new-link-input');
-    if (linkInput) linkInput.oninput = () => { state.newLinkDraft = linkInput.value; };
+    const lfName = document.getElementById('lf-name');
+    if (lfName) lfName.oninput = () => { state.linkDraft = { name: lfName.value, url: (state.linkDraft && state.linkDraft.url) || (document.getElementById('lf-url') ? document.getElementById('lf-url').value : '') }; };
+    const lfUrl = document.getElementById('lf-url');
+    if (lfUrl) lfUrl.oninput = () => { state.linkDraft = { name: (state.linkDraft && state.linkDraft.name) || (document.getElementById('lf-name') ? document.getElementById('lf-name').value : ''), url: lfUrl.value }; };
     const addLinkBtn = document.getElementById('add-link-btn');
     if (addLinkBtn) addLinkBtn.onclick = async () => {
-      const val = (state.newLinkDraft || '').trim();
-      if (!val) return;
-      state.links.push({ id: uid(), text: val });
-      state.newLinkDraft = '';
+      const name = (document.getElementById('lf-name').value || '').trim();
+      const url = (document.getElementById('lf-url').value || '').trim();
+      if (!name || !url) return;
+      state.links.push({ id: uid(), name: name, url: url });
+      state.linkDraft = null;
       await saveAll();
       render();
     };
@@ -829,13 +838,16 @@
       state.editLinkDraft = null;
       render();
     });
-    const editLinkInput = document.getElementById('edit-link-input');
-    if (editLinkInput) editLinkInput.oninput = () => { state.editLinkDraft = editLinkInput.value; };
+    const elName = document.getElementById('el-name');
+    if (elName) elName.oninput = () => { state.editLinkDraft = { name: elName.value, url: (state.editLinkDraft && state.editLinkDraft.url) || (document.getElementById('el-url') ? document.getElementById('el-url').value : '') }; };
+    const elUrl = document.getElementById('el-url');
+    if (elUrl) elUrl.oninput = () => { state.editLinkDraft = { name: (state.editLinkDraft && state.editLinkDraft.name) || (document.getElementById('el-name') ? document.getElementById('el-name').value : ''), url: elUrl.value }; };
     document.querySelectorAll('[data-save-link]').forEach(el => el.onclick = async () => {
       const id = el.getAttribute('data-save-link');
-      const val = (state.editLinkDraft != null ? state.editLinkDraft : '').trim();
-      if (!val) return;
-      state.links = state.links.map(l => l.id === id ? { ...l, text: val } : l);
+      const name = (document.getElementById('el-name').value || '').trim();
+      const url = (document.getElementById('el-url').value || '').trim();
+      if (!name || !url) return;
+      state.links = state.links.map(l => l.id === id ? { ...l, name: name, url: url } : l);
       state.editingLinkId = null;
       state.editLinkDraft = null;
       await saveAll();
