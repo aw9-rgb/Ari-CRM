@@ -1,4 +1,4 @@
-const { setSubscription } = require('../lib/db');
+const { addSubscription } = require('../lib/db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -13,6 +13,6 @@ module.exports = async (req, res) => {
     res.status(400).json({ error: 'invalid subscription' });
     return;
   }
-  await setSubscription(body);
+  await addSubscription(body);
   res.status(200).json({ ok: true });
 };
