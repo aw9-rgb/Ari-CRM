@@ -16,7 +16,8 @@ module.exports = async (req, res) => {
       contacts: body.contacts !== undefined ? body.contacts : current.contacts,
       tasks: body.tasks !== undefined ? body.tasks : current.tasks,
       history: body.history !== undefined ? body.history : current.history,
-      pipeline: body.pipeline !== undefined ? body.pipeline : current.pipeline
+      pipeline: body.pipeline !== undefined ? body.pipeline : current.pipeline,
+      links: body.links !== undefined ? body.links : current.links
     };
     await setData(next);
     res.status(200).json({ ok: true });
