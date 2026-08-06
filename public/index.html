@@ -35,6 +35,10 @@
   .tag-realtor { background: #e6f1fb; color: #0c447c; }
   .tag-client { background: #eaf3de; color: #27500a; }
   .tag-other { background: #f1efe8; color: #444441; }
+  .status-preapproval { background: #fef3d6; color: #7a5b06; }
+  .status-disclosures { background: #e6f1fb; color: #0c447c; }
+  .status-uw { background: #f1e6fb; color: #5b0c7c; }
+  .status-ctc { background: #eaf3de; color: #27500a; }
   .crm-method { font-size: 12px; color: #5f5e5a; }
   .crm-btn { border: 1px solid #cfc9ba; background: #ffffff; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; color: #2c2c2a; }
   .crm-btn:active { transform: scale(0.98); }
@@ -79,11 +83,13 @@
   const TAG_LABELS = { realtor: 'Realtor', client: 'Client', other: 'Other' };
   const METHOD_LABELS = { call: 'Call', text: 'Text', whatsapp: 'WhatsApp', email: 'Email', linkedin: 'LinkedIn' };
   const METHOD_OPTIONS = Object.keys(METHOD_LABELS).map(k => [k, METHOD_LABELS[k]]);
+  const STATUS_LABELS = { preapproval: 'Preapproval', disclosures: 'Disclosures', uw: 'UW', ctc: 'CTC' };
+  const STATUS_OPTIONS = Object.keys(STATUS_LABELS).map(k => [k, STATUS_LABELS[k]]);
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DOW = ['S','M','T','W','T','F','S'];
 
   let state = {
-    contacts: [], tasks: [], history: [],
+    contacts: [], tasks: [], history: [], pipeline: [],
     tab: 'today', filterTag: 'all', modal: null,
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
     calSelected: null,
@@ -123,8 +129,9 @@
       state.contacts = data.contacts || [];
       state.tasks = data.tasks || [];
       state.history = data.history || [];
+      state.pipeline = data.pipeline || [];
     } catch (err) {
-      state.contacts = []; state.tasks = []; state.history = [];
+      state.contacts = []; state.tasks = []; state.history = []; state.pipeline = [];
     }
   }
   async function saveAll() {
@@ -132,12 +139,13 @@
       await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contacts: state.contacts, tasks: state.tasks, history: state.history })
+        body: JSON.stringify({ contacts: state.contacts, tasks: state.tasks, history: state.history, pipeline: state.pipeline })
       });
     } catch (err) { console.error('save failed', err); }
   }
 
   function badge(tag) { return '<span class="crm-tag tag-' + esc(tag) + '">' + esc(TAG_LABELS[tag] || tag) + '</span>'; }
+  function statusBadge(status) { return '<span class="crm-tag status-' + esc(status) + '">' + esc(STATUS_LABELS[status] || status) + '</span>'; }
 
   function isStandalone() {
     return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
@@ -190,8 +198,8 @@
     const sortedContacts = filteredContacts.slice().sort((a,b) => (a.firstName+a.lastName).localeCompare(b.firstName+b.lastName));
 
     let html = '<div class="crm-tabs">';
-    ['today','contacts','calendar','history'].forEach(t => {
-      const label = t === 'today' ? 'Today' : t === 'contacts' ? 'Contacts' : t === 'calendar' ? 'Calendar' : 'History';
+    ['today','pipeline','contacts','calendar','history'].forEach(t => {
+      const label = t === 'today' ? 'Today' : t === 'pipeline' ? 'Active Pipeline' : t === 'contacts' ? 'Contacts' : t === 'calendar' ? 'Calendar' : 'History';
       html += '<button class="crm-tab' + (state.tab===t?' active':'') + '" data-tab="' + t + '">' + label + '</button>';
     });
     html += '</div><div class="crm-body">';
@@ -230,6 +238,18 @@
             '<div style="display:flex;gap:6px"><button class="crm-btn" data-edit-task="' + t.id + '">Edit</button><button class="crm-close" data-delete-task="' + t.id + '">&times;</button></div></div></div>';
         });
       }
+    }
+
+    if (state.tab === 'pipeline') {
+      html += '<div class="crm-actions" style="margin-bottom:1rem"><button class="crm-btn crm-btn-primary" id="open-add-pipeline" style="flex:1">+ Add to pipeline</button></div>';
+      if (state.pipeline.length === 0) html += '<div class="crm-empty">No active files yet. Add your first one above.</div>';
+      state.pipeline.forEach((p, i) => {
+        html += '<div class="crm-card"><div class="crm-row"><div>' +
+          '<div class="crm-name">#' + (i+1) + ' ' + esc(p.name) + '</div>' +
+          '<div class="crm-sub">' + statusBadge(p.status) + '</div>' +
+          (p.nextStep ? '<div class="crm-sub">Next step: ' + esc(p.nextStep) + '</div>' : '') +
+          '</div><button class="crm-btn" data-edit-pipeline="' + p.id + '">Edit</button></div></div>';
+      });
     }
 
     if (state.tab === 'contacts') {
@@ -273,6 +293,8 @@
 
     html += '</div>';
     if (state.modal === 'add-contact') html += renderContactModal();
+    if (state.modal === 'add-pipeline') html += renderPipelineModal();
+    if (state.modal === 'edit-pipeline' && state.editPipelineTarget) html += renderEditPipelineModal(state.editPipelineTarget);
     if (state.modal === 'done' && state.doneTarget) html += renderDoneModal(state.doneTarget);
     if (state.modal === 'edit-task' && state.editTaskTarget) html += renderEditTaskModal(state.editTaskTarget);
     if (state.modal === 'edit-contact' && state.editContactTarget) html += renderEditContactModal(state.editContactTarget);
@@ -309,6 +331,9 @@
     if (state.calSelected) {
       const items = dueByDate[state.calSelected] || [];
       html += '<div class="crm-section-title">' + formatDate(state.calSelected) + '</div>';
+      html += '<div class="crm-taskrow"><input type="text" id="cal-new-task-input" placeholder="Add a to-do for this day" value="' + esc(state.calNewTaskDraft || '') + '"/>' +
+        '<input type="time" id="cal-new-task-time" value="' + (state.calNewTaskTime || '') + '"/>' +
+        '<button class="crm-btn" id="cal-add-task-btn">Add</button></div>';
       if (items.length === 0) html += '<div class="crm-empty">Nothing scheduled this day.</div>';
       items.forEach(entry => {
         if (entry.type === 'contact') {
@@ -327,13 +352,35 @@
     return html;
   }
 
+  function renderPipelineModal() {
+    const d = state.pipelineDraft || { status: '' };
+    return '<div class="crm-overlay"><div class="crm-modal">' +
+      '<div class="crm-modal-header"><h3>Add to pipeline</h3><button class="crm-close" id="close-add-pipeline">&times;</button></div>' +
+      field('Name', 'text', 'pf-name', esc(d.name || ''), 'James Smith') +
+      statusSelectField('pf-status', d.status) +
+      field('Next step', 'text', 'pf-next', esc(d.nextStep || ''), 'Order appraisal') +
+      '<div class="crm-actions"><button class="crm-btn" id="cancel-add-pipeline">Cancel</button><button class="crm-btn crm-btn-primary" id="save-add-pipeline">Save</button></div>' +
+      '</div></div>';
+  }
+
+  function renderEditPipelineModal(p) {
+    const d = state.editPipelineDraft || { name: p.name, status: p.status, nextStep: p.nextStep || '' };
+    return '<div class="crm-overlay"><div class="crm-modal">' +
+      '<div class="crm-modal-header"><h3>Edit pipeline file</h3><button class="crm-close" id="close-edit-pipeline">&times;</button></div>' +
+      field('Name', 'text', 'ep-name', esc(d.name || ''), 'James Smith') +
+      statusSelectField('ep-status', d.status) +
+      field('Next step', 'text', 'ep-next', esc(d.nextStep || ''), 'Order appraisal') +
+      '<div class="crm-actions"><button class="crm-btn" id="delete-edit-pipeline" style="color:#a32d2d">Delete</button><button class="crm-btn crm-btn-primary" id="save-edit-pipeline">Save</button></div>' +
+      '</div></div>';
+  }
+
   function renderContactModal() {
-    const d = state.contactDraft || { tag: 'client', method: 'call', callbackDate: todayStr() };
+    const d = state.contactDraft || { tag: '', method: 'call', callbackDate: todayStr() };
     return '<div class="crm-overlay"><div class="crm-modal">' +
       '<div class="crm-modal-header"><h3>Add contact</h3><button class="crm-close" id="close-add-contact">&times;</button></div>' +
       field('First name', 'text', 'cf-first', esc(d.firstName || ''), 'Jamie') +
       field('Last name', 'text', 'cf-last', esc(d.lastName || ''), 'Rivera') +
-      selectField('Tag', 'cf-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
+      tagSelectField('cf-tag', d.tag) +
       field('Phone number', 'tel', 'cf-phone', esc(formatPhoneDisplay(d.phone || '')), '443-714-5281') +
       field('Email (optional)', 'email', 'cf-email', esc(d.email || ''), 'jamie@email.com') +
       selectField('Contact by', 'cf-method', d.method, METHOD_OPTIONS) +
@@ -396,6 +443,16 @@
   function selectField(label, id, value, options) {
     let opts = options.map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
     return '<div class="crm-field"><label>' + label + '</label><select id="' + id + '">' + opts + '</select></div>';
+  }
+  function tagSelectField(id, value) {
+    let opts = '<option value="" disabled' + (!value ? ' selected' : '') + '>Select tag...</option>';
+    opts += [['realtor','Realtor'],['client','Client'],['other','Other']].map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
+    return '<div class="crm-field"><label>Tag</label><select id="' + id + '">' + opts + '</select></div>';
+  }
+  function statusSelectField(id, value) {
+    let opts = '<option value="" disabled' + (!value ? ' selected' : '') + '>Select status...</option>';
+    opts += STATUS_OPTIONS.map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
+    return '<div class="crm-field"><label>Status</label><select id="' + id + '">' + opts + '</select></div>';
   }
   function textareaField(label, id, value, placeholder) {
     return '<div class="crm-field"><label>' + label + '</label><textarea id="' + id + '" rows="2" placeholder="' + placeholder + '">' + (value || '') + '</textarea></div>';
@@ -498,7 +555,7 @@
     if (saveAdd) saveAdd.onclick = async () => {
       readContactDraft();
       const d = state.contactDraft;
-      if (!d.firstName.trim() || !d.phone.trim()) return;
+      if (!d.firstName.trim() || !d.phone.trim() || !d.tag) return;
       state.contacts.push({ id: uid(), firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), email: (d.email || '').trim(), method: d.method, callbackDate: d.callbackDate || todayStr(), callbackTime: d.callbackTime || '', source: (d.tag === 'client' || d.tag === 'realtor') ? (d.source || '').trim() : '', notes: (d.notes || '').trim() });
       await saveAll();
       state.modal = null; state.contactDraft = null;
@@ -507,6 +564,58 @@
 
     const exportBtn = document.getElementById('export-contacts-btn');
     if (exportBtn) exportBtn.onclick = exportContactsCSV;
+
+    const openPipeline = document.getElementById('open-add-pipeline');
+    if (openPipeline) openPipeline.onclick = () => { state.modal = 'add-pipeline'; state.pipelineDraft = null; render(); };
+    const closeAddPipeline = document.getElementById('close-add-pipeline');
+    if (closeAddPipeline) closeAddPipeline.onclick = () => { state.modal = null; render(); };
+    const cancelAddPipeline = document.getElementById('cancel-add-pipeline');
+    if (cancelAddPipeline) cancelAddPipeline.onclick = () => { state.modal = null; render(); };
+    const saveAddPipeline = document.getElementById('save-add-pipeline');
+    if (saveAddPipeline) saveAddPipeline.onclick = async () => {
+      const name = document.getElementById('pf-name').value;
+      const status = document.getElementById('pf-status').value;
+      const nextStep = document.getElementById('pf-next').value;
+      if (!name.trim() || !status) return;
+      state.pipeline.push({ id: uid(), name: name.trim(), status: status, nextStep: nextStep.trim() });
+      await saveAll();
+      state.modal = null; state.pipelineDraft = null;
+      render();
+    };
+
+    document.querySelectorAll('[data-edit-pipeline]').forEach(el => el.onclick = () => {
+      const id = el.getAttribute('data-edit-pipeline');
+      state.editPipelineTarget = state.pipeline.find(p => p.id === id);
+      state.editPipelineDraft = null;
+      state.modal = 'edit-pipeline';
+      render();
+    });
+    const closeEditPipeline = document.getElementById('close-edit-pipeline');
+    if (closeEditPipeline) closeEditPipeline.onclick = () => { state.modal = null; state.editPipelineTarget = null; render(); };
+    const saveEditPipeline = document.getElementById('save-edit-pipeline');
+    if (saveEditPipeline) saveEditPipeline.onclick = async () => {
+      const name = document.getElementById('ep-name').value;
+      const status = document.getElementById('ep-status').value;
+      const nextStep = document.getElementById('ep-next').value;
+      if (!name.trim() || !status) return;
+      const id = state.editPipelineTarget.id;
+      state.pipeline = state.pipeline.map(p => p.id === id
+        ? { ...p, name: name.trim(), status: status, nextStep: nextStep.trim() }
+        : p
+      );
+      await saveAll();
+      state.modal = null; state.editPipelineTarget = null; state.editPipelineDraft = null;
+      render();
+    };
+    const deleteEditPipeline = document.getElementById('delete-edit-pipeline');
+    if (deleteEditPipeline) deleteEditPipeline.onclick = async () => {
+      if (!confirm('Remove this file from the pipeline?')) return;
+      const id = state.editPipelineTarget.id;
+      state.pipeline = state.pipeline.filter(p => p.id !== id);
+      await saveAll();
+      state.modal = null; state.editPipelineTarget = null; state.editPipelineDraft = null;
+      render();
+    };
 
     document.querySelectorAll('[data-edit-contact]').forEach(el => el.onclick = () => {
       const id = el.getAttribute('data-edit-contact');
@@ -643,8 +752,25 @@
     document.querySelectorAll('[data-cal-day]').forEach(el => el.onclick = () => {
       const key = el.getAttribute('data-cal-day');
       state.calSelected = state.calSelected === key ? null : key;
+      state.calNewTaskDraft = '';
+      state.calNewTaskTime = '';
       render();
     });
+
+    const calTaskInput = document.getElementById('cal-new-task-input');
+    if (calTaskInput) calTaskInput.oninput = () => { state.calNewTaskDraft = calTaskInput.value; };
+    const calTaskTimeInput = document.getElementById('cal-new-task-time');
+    if (calTaskTimeInput) calTaskTimeInput.oninput = () => { state.calNewTaskTime = calTaskTimeInput.value; };
+    const calAddTaskBtn = document.getElementById('cal-add-task-btn');
+    if (calAddTaskBtn) calAddTaskBtn.onclick = async () => {
+      const val = (state.calNewTaskDraft || '').trim();
+      if (!val) return;
+      state.tasks.push({ id: uid(), text: val, done: false, date: state.calSelected, time: state.calNewTaskTime || '' });
+      state.calNewTaskDraft = '';
+      state.calNewTaskTime = '';
+      await saveAll();
+      render();
+    };
   }
 
   async function init() {
