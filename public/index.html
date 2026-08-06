@@ -35,10 +35,13 @@
   .tag-realtor { background: #e6f1fb; color: #0c447c; }
   .tag-client { background: #eaf3de; color: #27500a; }
   .tag-other { background: #f1efe8; color: #444441; }
+  .status-lead { background: #f1efe8; color: #444441; }
   .status-preapproval { background: #fef3d6; color: #7a5b06; }
   .status-disclosures { background: #e6f1fb; color: #0c447c; }
   .status-uw { background: #f1e6fb; color: #5b0c7c; }
   .status-ctc { background: #eaf3de; color: #27500a; }
+  .drag-handle { cursor: grab; touch-action: none; padding: 2px 10px 2px 0; color: #b7b1a0; font-size: 18px; user-select: none; line-height: 1.4; }
+  .crm-card.dragging { opacity: 0.6; box-shadow: 0 6px 16px rgba(0,0,0,0.2); position: relative; z-index: 20; }
   .crm-method { font-size: 12px; color: #5f5e5a; }
   .crm-btn { border: 1px solid #cfc9ba; background: #ffffff; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; color: #2c2c2a; }
   .crm-btn:active { transform: scale(0.98); }
@@ -83,8 +86,10 @@
   const TAG_LABELS = { realtor: 'Realtor', client: 'Client', other: 'Other' };
   const METHOD_LABELS = { call: 'Call', text: 'Text', whatsapp: 'WhatsApp', email: 'Email', linkedin: 'LinkedIn' };
   const METHOD_OPTIONS = Object.keys(METHOD_LABELS).map(k => [k, METHOD_LABELS[k]]);
-  const STATUS_LABELS = { preapproval: 'Preapproval', disclosures: 'Disclosures', uw: 'UW', ctc: 'CTC' };
+  const STATUS_LABELS = { lead: 'Lead', preapproval: 'Preapproval', disclosures: 'Disclosures', uw: 'UW', ctc: 'CTC' };
   const STATUS_OPTIONS = Object.keys(STATUS_LABELS).map(k => [k, STATUS_LABELS[k]]);
+  const LOAN_TYPE_LABELS = { purchase: 'Purchase', rt_refi: 'R/T Refi', co_refi: 'C/O Refi', other: 'Other' };
+  const LOAN_TYPE_OPTIONS = Object.keys(LOAN_TYPE_LABELS).map(k => [k, LOAN_TYPE_LABELS[k]]);
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DOW = ['S','M','T','W','T','F','S'];
 
@@ -146,6 +151,11 @@
 
   function badge(tag) { return '<span class="crm-tag tag-' + esc(tag) + '">' + esc(TAG_LABELS[tag] || tag) + '</span>'; }
   function statusBadge(status) { return '<span class="crm-tag status-' + esc(status) + '">' + esc(STATUS_LABELS[status] || status) + '</span>'; }
+  function loanTypeLabel(p) {
+    if (!p.loanType) return '';
+    if (p.loanType === 'other') return p.loanTypeOther ? ('Other - ' + p.loanTypeOther) : 'Other';
+    return LOAN_TYPE_LABELS[p.loanType] || '';
+  }
 
   function isStandalone() {
     return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
@@ -243,13 +253,18 @@
     if (state.tab === 'pipeline') {
       html += '<div class="crm-actions" style="margin-bottom:1rem"><button class="crm-btn crm-btn-primary" id="open-add-pipeline" style="flex:1">+ Add to pipeline</button></div>';
       if (state.pipeline.length === 0) html += '<div class="crm-empty">No active files yet. Add your first one above.</div>';
+      html += '<div id="pipeline-list">';
       state.pipeline.forEach((p, i) => {
-        html += '<div class="crm-card"><div class="crm-row"><div>' +
+        const lt = loanTypeLabel(p);
+        html += '<div class="crm-card" data-pipeline-id="' + p.id + '"><div class="crm-row">' +
+          '<span class="drag-handle" data-drag-handle="' + p.id + '">&#9776;</span>' +
+          '<div style="flex:1">' +
           '<div class="crm-name">#' + (i+1) + ' ' + esc(p.name) + '</div>' +
-          '<div class="crm-sub">' + statusBadge(p.status) + '</div>' +
+          '<div class="crm-sub">' + statusBadge(p.status) + (lt ? ' <span class="crm-method">' + esc(lt) + '</span>' : '') + '</div>' +
           (p.nextStep ? '<div class="crm-sub">Next step: ' + esc(p.nextStep) + '</div>' : '') +
           '</div><button class="crm-btn" data-edit-pipeline="' + p.id + '">Edit</button></div></div>';
       });
+      html += '</div>';
     }
 
     if (state.tab === 'contacts') {
@@ -353,22 +368,26 @@
   }
 
   function renderPipelineModal() {
-    const d = state.pipelineDraft || { status: '' };
+    const d = state.pipelineDraft || { status: '', loanType: '' };
     return '<div class="crm-overlay"><div class="crm-modal">' +
       '<div class="crm-modal-header"><h3>Add to pipeline</h3><button class="crm-close" id="close-add-pipeline">&times;</button></div>' +
       field('Name', 'text', 'pf-name', esc(d.name || ''), 'James Smith') +
       statusSelectField('pf-status', d.status) +
+      loanTypeSelectField('pf-loantype', d.loanType) +
+      (d.loanType === 'other' ? field('Loan type (specify)', 'text', 'pf-loantype-other', esc(d.loanTypeOther || ''), 'e.g. Construction, HELOC') : '') +
       field('Next step', 'text', 'pf-next', esc(d.nextStep || ''), 'Order appraisal') +
       '<div class="crm-actions"><button class="crm-btn" id="cancel-add-pipeline">Cancel</button><button class="crm-btn crm-btn-primary" id="save-add-pipeline">Save</button></div>' +
       '</div></div>';
   }
 
   function renderEditPipelineModal(p) {
-    const d = state.editPipelineDraft || { name: p.name, status: p.status, nextStep: p.nextStep || '' };
+    const d = state.editPipelineDraft || { name: p.name, status: p.status, loanType: p.loanType || '', loanTypeOther: p.loanTypeOther || '', nextStep: p.nextStep || '' };
     return '<div class="crm-overlay"><div class="crm-modal">' +
       '<div class="crm-modal-header"><h3>Edit pipeline file</h3><button class="crm-close" id="close-edit-pipeline">&times;</button></div>' +
       field('Name', 'text', 'ep-name', esc(d.name || ''), 'James Smith') +
       statusSelectField('ep-status', d.status) +
+      loanTypeSelectField('ep-loantype', d.loanType) +
+      (d.loanType === 'other' ? field('Loan type (specify)', 'text', 'ep-loantype-other', esc(d.loanTypeOther || ''), 'e.g. Construction, HELOC') : '') +
       field('Next step', 'text', 'ep-next', esc(d.nextStep || ''), 'Order appraisal') +
       '<div class="crm-actions"><button class="crm-btn" id="delete-edit-pipeline" style="color:#a32d2d">Delete</button><button class="crm-btn crm-btn-primary" id="save-edit-pipeline">Save</button></div>' +
       '</div></div>';
@@ -454,6 +473,11 @@
     opts += STATUS_OPTIONS.map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
     return '<div class="crm-field"><label>Status</label><select id="' + id + '">' + opts + '</select></div>';
   }
+  function loanTypeSelectField(id, value) {
+    let opts = '<option value="">Select loan type (optional)...</option>';
+    opts += LOAN_TYPE_OPTIONS.map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
+    return '<div class="crm-field"><label>Loan type</label><select id="' + id + '">' + opts + '</select></div>';
+  }
   function textareaField(label, id, value, placeholder) {
     return '<div class="crm-field"><label>' + label + '</label><textarea id="' + id + '" rows="2" placeholder="' + placeholder + '">' + (value || '') + '</textarea></div>';
   }
@@ -533,6 +557,44 @@
     };
   }
 
+  function wirePipelineDrag() {
+    const list = document.getElementById('pipeline-list');
+    if (!list) return;
+    list.querySelectorAll('[data-drag-handle]').forEach(handle => {
+      handle.addEventListener('pointerdown', (e) => {
+        const card = handle.closest('.crm-card');
+        if (!card) return;
+        e.preventDefault();
+        card.classList.add('dragging');
+        try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+
+        const onMove = (ev) => {
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const target = el && el.closest('.crm-card');
+          if (target && target !== card && list.contains(target)) {
+            const rect = target.getBoundingClientRect();
+            const before = (ev.clientY - rect.top) < rect.height / 2;
+            list.insertBefore(card, before ? target : target.nextSibling);
+          }
+        };
+        const onUp = async (ev) => {
+          card.classList.remove('dragging');
+          try { handle.releasePointerCapture(ev.pointerId); } catch (err) {}
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          const newOrder = Array.from(list.querySelectorAll('[data-pipeline-id]')).map(c => c.getAttribute('data-pipeline-id'));
+          state.pipeline = newOrder.map(id => state.pipeline.find(p => p.id === id)).filter(Boolean);
+          await saveAll();
+          render();
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      });
+    });
+  }
+
   function attachHandlers() {
     wirePhoneAutoFormat('cf-phone');
     wirePhoneAutoFormat('ec-phone');
@@ -571,13 +633,27 @@
     if (closeAddPipeline) closeAddPipeline.onclick = () => { state.modal = null; render(); };
     const cancelAddPipeline = document.getElementById('cancel-add-pipeline');
     if (cancelAddPipeline) cancelAddPipeline.onclick = () => { state.modal = null; render(); };
+    const pfLoanType = document.getElementById('pf-loantype');
+    if (pfLoanType) pfLoanType.onchange = () => {
+      state.pipelineDraft = {
+        name: document.getElementById('pf-name').value,
+        status: document.getElementById('pf-status').value,
+        loanType: pfLoanType.value,
+        loanTypeOther: (state.pipelineDraft && state.pipelineDraft.loanTypeOther) || '',
+        nextStep: document.getElementById('pf-next').value
+      };
+      render();
+    };
     const saveAddPipeline = document.getElementById('save-add-pipeline');
     if (saveAddPipeline) saveAddPipeline.onclick = async () => {
       const name = document.getElementById('pf-name').value;
       const status = document.getElementById('pf-status').value;
+      const loanType = document.getElementById('pf-loantype').value;
+      const loanTypeOtherEl = document.getElementById('pf-loantype-other');
+      const loanTypeOther = loanTypeOtherEl ? loanTypeOtherEl.value.trim() : '';
       const nextStep = document.getElementById('pf-next').value;
       if (!name.trim() || !status) return;
-      state.pipeline.push({ id: uid(), name: name.trim(), status: status, nextStep: nextStep.trim() });
+      state.pipeline.push({ id: uid(), name: name.trim(), status: status, loanType: loanType, loanTypeOther: loanTypeOther, nextStep: nextStep.trim() });
       await saveAll();
       state.modal = null; state.pipelineDraft = null;
       render();
@@ -592,15 +668,30 @@
     });
     const closeEditPipeline = document.getElementById('close-edit-pipeline');
     if (closeEditPipeline) closeEditPipeline.onclick = () => { state.modal = null; state.editPipelineTarget = null; render(); };
+    const epLoanType = document.getElementById('ep-loantype');
+    if (epLoanType) epLoanType.onchange = () => {
+      const p = state.editPipelineTarget;
+      state.editPipelineDraft = {
+        name: document.getElementById('ep-name').value,
+        status: document.getElementById('ep-status').value,
+        loanType: epLoanType.value,
+        loanTypeOther: (state.editPipelineDraft && state.editPipelineDraft.loanTypeOther) || p.loanTypeOther || '',
+        nextStep: document.getElementById('ep-next').value
+      };
+      render();
+    };
     const saveEditPipeline = document.getElementById('save-edit-pipeline');
     if (saveEditPipeline) saveEditPipeline.onclick = async () => {
       const name = document.getElementById('ep-name').value;
       const status = document.getElementById('ep-status').value;
+      const loanType = document.getElementById('ep-loantype').value;
+      const loanTypeOtherEl = document.getElementById('ep-loantype-other');
+      const loanTypeOther = loanTypeOtherEl ? loanTypeOtherEl.value.trim() : '';
       const nextStep = document.getElementById('ep-next').value;
       if (!name.trim() || !status) return;
       const id = state.editPipelineTarget.id;
       state.pipeline = state.pipeline.map(p => p.id === id
-        ? { ...p, name: name.trim(), status: status, nextStep: nextStep.trim() }
+        ? { ...p, name: name.trim(), status: status, loanType: loanType, loanTypeOther: loanTypeOther, nextStep: nextStep.trim() }
         : p
       );
       await saveAll();
@@ -616,6 +707,8 @@
       state.modal = null; state.editPipelineTarget = null; state.editPipelineDraft = null;
       render();
     };
+
+    wirePipelineDrag();
 
     document.querySelectorAll('[data-edit-contact]').forEach(el => el.onclick = () => {
       const id = el.getAttribute('data-edit-contact');
