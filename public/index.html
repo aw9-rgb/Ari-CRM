@@ -42,7 +42,7 @@
   .crm-fab { width: 100%; padding: 12px; border-radius: 10px; background: #0f6e56; color: #fff; border: none; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 1rem; }
   .crm-field { margin-bottom: 12px; }
   .crm-field label { display: block; font-size: 12px; color: #5f5e5a; margin-bottom: 4px; font-weight: 500; }
-  .crm-field input, .crm-field select { width: 100%; padding: 9px 10px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 14px; background: #ffffff; color: #2c2c2a; }
+  .crm-field input, .crm-field select, .crm-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 14px; background: #ffffff; color: #2c2c2a; font-family: inherit; resize: vertical; }
   .crm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
   .crm-modal { background: #faf8f4; width: 100%; max-width: 480px; border-radius: 16px 16px 0 0; padding: 1.25rem; max-height: 85vh; overflow-y: auto; }
   .crm-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -77,7 +77,8 @@
 (function() {
   const VAPID_PUBLIC_KEY = 'BJvjXcBcSk4j7vJ5YCWNQsnFM4PeFjhM0k2poOl8tOPH_p1b2V7dMJHicdDLPk0cwb9dwbRIuqh8_LTXBuHaXuI';
   const TAG_LABELS = { realtor: 'Realtor', client: 'Client', other: 'Other' };
-  const METHOD_LABELS = { call: 'Call', text: 'Text', email: 'Email', linkedin: 'LinkedIn' };
+  const METHOD_LABELS = { call: 'Call', text: 'Text', whatsapp: 'WhatsApp', email: 'Email', linkedin: 'LinkedIn' };
+  const METHOD_OPTIONS = Object.keys(METHOD_LABELS).map(k => [k, METHOD_LABELS[k]]);
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DOW = ['S','M','T','W','T','F','S'];
 
@@ -107,6 +108,12 @@
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
     return h12 + ':' + String(min).padStart(2,'0') + ' ' + period;
+  }
+  function formatPhoneDisplay(phone) {
+    const digits = String(phone == null ? '' : phone).replace(/\D/g, '').slice(0, 10);
+    if (digits.length > 6) return digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6);
+    if (digits.length > 3) return digits.slice(0,3) + '-' + digits.slice(3);
+    return digits;
   }
 
   async function loadAll() {
@@ -201,7 +208,8 @@
       dueToday.forEach(c => {
         html += '<div class="crm-card"><div class="crm-row"><div>' +
           '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + (c.callbackTime ? ' <span class="crm-method">' + esc(formatTime(c.callbackTime)) + '</span>' : '') + '</div>' +
-          '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(c.phone) + '</span></div>' +
+          '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
+          (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
           '</div><button class="crm-btn crm-btn-primary" data-done="' + c.id + '">Done</button></div></div>';
       });
       html += '<div class="crm-section-title">To-dos</div>';
@@ -225,7 +233,10 @@
     }
 
     if (state.tab === 'contacts') {
-      html += '<button class="crm-fab" id="open-add-contact">+ Add contact</button>';
+      html += '<div class="crm-actions" style="margin-bottom:1rem">' +
+        '<button class="crm-btn crm-btn-primary" id="open-add-contact" style="flex:2">+ Add contact</button>' +
+        '<button class="crm-btn" id="export-contacts-btn" style="flex:1">Export to Excel</button>' +
+        '</div>';
       html += '<div class="crm-filters">';
       ['all','realtor','client','other'].forEach(tg => {
         const active = state.filterTag === tg;
@@ -234,11 +245,13 @@
       html += '</div>';
       if (sortedContacts.length === 0) html += '<div class="crm-empty">No contacts yet. Add your first one above.</div>';
       sortedContacts.forEach(c => {
-        html += '<div class="crm-card">' +
+        html += '<div class="crm-card"><div class="crm-row"><div>' +
           '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + '</div>' +
-          '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(c.phone) + '</span></div>' +
+          '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
           '<div class="crm-sub">Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') + '</div>' +
-          '</div>';
+          (c.tag === 'client' && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
+          (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
+          '</div><button class="crm-btn" data-edit-contact="' + c.id + '">Edit</button></div></div>';
       });
     }
 
@@ -261,6 +274,7 @@
     if (state.modal === 'add-contact') html += renderContactModal();
     if (state.modal === 'done' && state.doneTarget) html += renderDoneModal(state.doneTarget);
     if (state.modal === 'edit-task' && state.editTaskTarget) html += renderEditTaskModal(state.editTaskTarget);
+    if (state.modal === 'edit-contact' && state.editContactTarget) html += renderEditContactModal(state.editContactTarget);
 
     root.innerHTML = html;
     attachHandlers();
@@ -299,7 +313,7 @@
         if (entry.type === 'contact') {
           const c = entry.item;
           html += '<div class="crm-card"><div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + (c.callbackTime ? ' <span class="crm-method">' + esc(formatTime(c.callbackTime)) + '</span>' : '') + '</div>' +
-            '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(c.phone) + '</span></div></div>';
+            '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div></div>';
         } else {
           const t = entry.item;
           html += '<div class="crm-card"><div class="crm-row"><div class="crm-name">' + esc(t.text) + (t.time ? ' <span class="crm-method">' + esc(formatTime(t.time)) + '</span>' : '') + '</div>' +
@@ -317,10 +331,12 @@
       field('First name', 'text', 'cf-first', esc(d.firstName || ''), 'Jamie') +
       field('Last name', 'text', 'cf-last', esc(d.lastName || ''), 'Rivera') +
       selectField('Tag', 'cf-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
-      field('Phone number', 'text', 'cf-phone', esc(d.phone || ''), '(555) 123-4567') +
-      selectField('Contact by', 'cf-method', d.method, [['call','Call'],['text','Text'],['email','Email'],['linkedin','LinkedIn']]) +
+      field('Phone number', 'tel', 'cf-phone', esc(formatPhoneDisplay(d.phone || '')), '443-714-5281') +
+      selectField('Contact by', 'cf-method', d.method, METHOD_OPTIONS) +
       field('Callback date', 'date', 'cf-date', d.callbackDate, '') +
       field('Time (optional)', 'time', 'cf-time', d.callbackTime || '', '') +
+      (d.tag === 'client' ? field('Source', 'text', 'cf-source', esc(d.source || ''), 'Zillow, open house, past client...') : '') +
+      textareaField('Notes', 'cf-notes', esc(d.notes || ''), 'Anything worth remembering') +
       '<div class="crm-actions"><button class="crm-btn" id="cancel-add-contact">Cancel</button><button class="crm-btn crm-btn-primary" id="save-add-contact">Save contact</button></div>' +
       '</div></div>';
   }
@@ -332,12 +348,29 @@
       field('First name', 'text', 'df-first', esc(d.firstName), '') +
       field('Last name', 'text', 'df-last', esc(d.lastName), '') +
       selectField('Tag', 'df-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
-      field('Phone number', 'text', 'df-phone', esc(d.phone), '') +
+      field('Phone number', 'tel', 'df-phone', esc(formatPhoneDisplay(d.phone)), '') +
       '<div class="crm-section-title">Next callback</div>' +
-      selectField('Contact by', 'df-method', d.nextMethod, [['call','Call'],['text','Text'],['email','Email'],['linkedin','LinkedIn']]) +
+      selectField('Contact by', 'df-method', d.nextMethod, METHOD_OPTIONS) +
       field('Date to contact next', 'date', 'df-date', d.nextDate, '') +
       field('Time (optional)', 'time', 'df-time', d.nextTime || '', '') +
       '<div class="crm-actions"><button class="crm-btn" id="cancel-done">Cancel</button><button class="crm-btn crm-btn-primary" id="confirm-done">Mark done</button></div>' +
+      '</div></div>';
+  }
+
+  function renderEditContactModal(c) {
+    const d = state.editContactDraft || { firstName: c.firstName, lastName: c.lastName, tag: c.tag, phone: c.phone, method: c.method, callbackDate: c.callbackDate, callbackTime: c.callbackTime || '', source: c.source || '', notes: c.notes || '' };
+    return '<div class="crm-overlay"><div class="crm-modal">' +
+      '<div class="crm-modal-header"><h3>Edit contact</h3><button class="crm-close" id="close-edit-contact">&times;</button></div>' +
+      field('First name', 'text', 'ec-first', esc(d.firstName || ''), 'Jamie') +
+      field('Last name', 'text', 'ec-last', esc(d.lastName || ''), 'Rivera') +
+      selectField('Tag', 'ec-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
+      field('Phone number', 'tel', 'ec-phone', esc(formatPhoneDisplay(d.phone || '')), '443-714-5281') +
+      selectField('Contact by', 'ec-method', d.method, METHOD_OPTIONS) +
+      field('Callback date', 'date', 'ec-date', d.callbackDate, '') +
+      field('Time (optional)', 'time', 'ec-time', d.callbackTime || '', '') +
+      (d.tag === 'client' ? field('Source', 'text', 'ec-source', esc(d.source || ''), 'Zillow, open house, past client...') : '') +
+      textareaField('Notes', 'ec-notes', esc(d.notes || ''), 'Anything worth remembering') +
+      '<div class="crm-actions"><button class="crm-btn" id="delete-edit-contact" style="color:#a32d2d">Delete</button><button class="crm-btn crm-btn-primary" id="save-edit-contact">Save</button></div>' +
       '</div></div>';
   }
 
@@ -359,8 +392,13 @@
     let opts = options.map(([v,l]) => '<option value="' + v + '"' + (v===value?' selected':'') + '>' + l + '</option>').join('');
     return '<div class="crm-field"><label>' + label + '</label><select id="' + id + '">' + opts + '</select></div>';
   }
+  function textareaField(label, id, value, placeholder) {
+    return '<div class="crm-field"><label>' + label + '</label><textarea id="' + id + '" rows="2" placeholder="' + placeholder + '">' + (value || '') + '</textarea></div>';
+  }
 
   function readContactDraft() {
+    const prev = state.contactDraft;
+    const sourceEl = document.getElementById('cf-source');
     state.contactDraft = {
       firstName: document.getElementById('cf-first').value,
       lastName: document.getElementById('cf-last').value,
@@ -368,9 +406,47 @@
       phone: document.getElementById('cf-phone').value,
       method: document.getElementById('cf-method').value,
       callbackDate: document.getElementById('cf-date').value,
-      callbackTime: document.getElementById('cf-time').value
+      callbackTime: document.getElementById('cf-time').value,
+      source: sourceEl ? sourceEl.value : ((prev && prev.source) || ''),
+      notes: document.getElementById('cf-notes').value
     };
   }
+  function readEditContactDraft() {
+    const prev = state.editContactDraft;
+    const sourceEl = document.getElementById('ec-source');
+    state.editContactDraft = {
+      firstName: document.getElementById('ec-first').value,
+      lastName: document.getElementById('ec-last').value,
+      tag: document.getElementById('ec-tag').value,
+      phone: document.getElementById('ec-phone').value,
+      method: document.getElementById('ec-method').value,
+      callbackDate: document.getElementById('ec-date').value,
+      callbackTime: document.getElementById('ec-time').value,
+      source: sourceEl ? sourceEl.value : ((prev && prev.source) || ''),
+      notes: document.getElementById('ec-notes').value
+    };
+  }
+
+  function exportContactsCSV() {
+    const headers = ['First Name','Last Name','Tag','Phone','Contact Method','Next Callback Date','Next Callback Time','Source','Notes'];
+    const rows = state.contacts.map(c => [
+      c.firstName || '', c.lastName || '', TAG_LABELS[c.tag] || c.tag || '',
+      formatPhoneDisplay(c.phone), METHOD_LABELS[c.method] || c.method || '',
+      c.callbackDate || '', c.callbackTime || '', c.source || '', c.notes || ''
+    ]);
+    const csvEscape = v => '"' + String(v).replace(/"/g, '""') + '"';
+    const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'contacts-' + todayStr() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function readDoneDraft() {
     state.doneDraft = {
       firstName: document.getElementById('df-first').value,
@@ -383,7 +459,20 @@
     };
   }
 
+  function wirePhoneAutoFormat(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.oninput = () => {
+      const atEnd = el.selectionStart === el.value.length;
+      el.value = formatPhoneDisplay(el.value);
+      if (atEnd) { el.selectionStart = el.selectionEnd = el.value.length; }
+    };
+  }
+
   function attachHandlers() {
+    wirePhoneAutoFormat('cf-phone');
+    wirePhoneAutoFormat('ec-phone');
+    wirePhoneAutoFormat('df-phone');
     document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { state.tab = el.getAttribute('data-tab'); render(); });
     document.querySelectorAll('[data-filter]').forEach(el => el.onclick = () => { state.filterTag = el.getAttribute('data-filter'); render(); });
 
@@ -396,14 +485,54 @@
     if (closeAdd) closeAdd.onclick = () => { state.modal = null; render(); };
     const cancelAdd = document.getElementById('cancel-add-contact');
     if (cancelAdd) cancelAdd.onclick = () => { state.modal = null; render(); };
+    const cfTag = document.getElementById('cf-tag');
+    if (cfTag) cfTag.onchange = () => { readContactDraft(); render(); };
     const saveAdd = document.getElementById('save-add-contact');
     if (saveAdd) saveAdd.onclick = async () => {
       readContactDraft();
       const d = state.contactDraft;
       if (!d.firstName.trim() || !d.phone.trim()) return;
-      state.contacts.push({ id: uid(), firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.method, callbackDate: d.callbackDate || todayStr(), callbackTime: d.callbackTime || '' });
+      state.contacts.push({ id: uid(), firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.method, callbackDate: d.callbackDate || todayStr(), callbackTime: d.callbackTime || '', source: d.tag === 'client' ? (d.source || '').trim() : '', notes: (d.notes || '').trim() });
       await saveAll();
       state.modal = null; state.contactDraft = null;
+      render();
+    };
+
+    const exportBtn = document.getElementById('export-contacts-btn');
+    if (exportBtn) exportBtn.onclick = exportContactsCSV;
+
+    document.querySelectorAll('[data-edit-contact]').forEach(el => el.onclick = () => {
+      const id = el.getAttribute('data-edit-contact');
+      state.editContactTarget = state.contacts.find(c => c.id === id);
+      state.editContactDraft = null;
+      state.modal = 'edit-contact';
+      render();
+    });
+    const closeEditContact = document.getElementById('close-edit-contact');
+    if (closeEditContact) closeEditContact.onclick = () => { state.modal = null; state.editContactTarget = null; render(); };
+    const ecTag = document.getElementById('ec-tag');
+    if (ecTag) ecTag.onchange = () => { readEditContactDraft(); render(); };
+    const saveEditContact = document.getElementById('save-edit-contact');
+    if (saveEditContact) saveEditContact.onclick = async () => {
+      readEditContactDraft();
+      const d = state.editContactDraft;
+      if (!d.firstName.trim() || !d.phone.trim() || !d.callbackDate) return;
+      const id = state.editContactTarget.id;
+      state.contacts = state.contacts.map(c => c.id === id
+        ? { ...c, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.method, callbackDate: d.callbackDate, callbackTime: d.callbackTime || '', source: d.tag === 'client' ? (d.source || '').trim() : '', notes: (d.notes || '').trim() }
+        : c
+      );
+      await saveAll();
+      state.modal = null; state.editContactTarget = null; state.editContactDraft = null;
+      render();
+    };
+    const deleteEditContact = document.getElementById('delete-edit-contact');
+    if (deleteEditContact) deleteEditContact.onclick = async () => {
+      if (!confirm('Delete this contact? This cannot be undone.')) return;
+      const id = state.editContactTarget.id;
+      state.contacts = state.contacts.filter(c => c.id !== id);
+      await saveAll();
+      state.modal = null; state.editContactTarget = null; state.editContactDraft = null;
       render();
     };
 
