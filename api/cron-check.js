@@ -1,5 +1,5 @@
 const webpush = require('web-push');
-const { getData, getSubscription } = require('../lib/db');
+const { getData, getSubscriptions, removeSubscription } = require('../lib/db');
 
 function todayStr() {
   const d = new Date();
@@ -29,8 +29,8 @@ module.exports = async (req, res) => {
     process.env.VAPID_PRIVATE_KEY
   );
 
-  const sub = await getSubscription();
-  if (!sub) {
+  const subs = await getSubscriptions();
+  if (subs.length === 0) {
     res.status(200).json({ ok: true, sent: false, reason: 'no subscription' });
     return;
   }
@@ -61,10 +61,22 @@ module.exports = async (req, res) => {
 
   const payload = JSON.stringify({ title: 'Callback CRM', body });
 
-  try {
-    await webpush.sendNotification(sub, payload);
-    res.status(200).json({ ok: true, sent: true });
-  } catch (err) {
-    res.status(200).json({ ok: true, sent: false, error: String(err) });
-  }
+  let sentCount = 0;
+  const errors = [];
+  await Promise.all(subs.map(async (sub) => {
+    try {
+      await webpush.sendNotification(sub, payload);
+      sentCount++;
+    } catch (err) {
+      // 404/410 means the browser unsubscribed or the device is gone for good —
+      // remove it so future runs don't keep failing on it.
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+        await removeSubscription(sub.endpoint);
+      } else {
+        errors.push(String(err));
+      }
+    }
+  }));
+
+  res.status(200).json({ ok: true, sent: sentCount > 0, sentCount, total: subs.length, errors });
 };
