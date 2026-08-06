@@ -249,7 +249,8 @@
           '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + '</div>' +
           '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
           '<div class="crm-sub">Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') + '</div>' +
-          (c.tag === 'client' && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
+          (c.email ? '<div class="crm-sub">' + esc(c.email) + '</div>' : '') +
+          ((c.tag === 'client' || c.tag === 'realtor') && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
           (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
           '</div><button class="crm-btn" data-edit-contact="' + c.id + '">Edit</button></div></div>';
       });
@@ -312,8 +313,10 @@
       items.forEach(entry => {
         if (entry.type === 'contact') {
           const c = entry.item;
-          html += '<div class="crm-card"><div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + (c.callbackTime ? ' <span class="crm-method">' + esc(formatTime(c.callbackTime)) + '</span>' : '') + '</div>' +
-            '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div></div>';
+          html += '<div class="crm-card"><div class="crm-row"><div>' +
+            '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + (c.callbackTime ? ' <span class="crm-method">' + esc(formatTime(c.callbackTime)) + '</span>' : '') + '</div>' +
+            '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
+            '</div><button class="crm-btn" data-edit-contact="' + c.id + '">Edit</button></div></div>';
         } else {
           const t = entry.item;
           html += '<div class="crm-card"><div class="crm-row"><div class="crm-name">' + esc(t.text) + (t.time ? ' <span class="crm-method">' + esc(formatTime(t.time)) + '</span>' : '') + '</div>' +
@@ -332,10 +335,11 @@
       field('Last name', 'text', 'cf-last', esc(d.lastName || ''), 'Rivera') +
       selectField('Tag', 'cf-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
       field('Phone number', 'tel', 'cf-phone', esc(formatPhoneDisplay(d.phone || '')), '443-714-5281') +
+      field('Email (optional)', 'email', 'cf-email', esc(d.email || ''), 'jamie@email.com') +
       selectField('Contact by', 'cf-method', d.method, METHOD_OPTIONS) +
       field('Callback date', 'date', 'cf-date', d.callbackDate, '') +
       field('Time (optional)', 'time', 'cf-time', d.callbackTime || '', '') +
-      (d.tag === 'client' ? field('Source', 'text', 'cf-source', esc(d.source || ''), 'Zillow, open house, past client...') : '') +
+      ((d.tag === 'client' || d.tag === 'realtor') ? field('Source', 'text', 'cf-source', esc(d.source || ''), 'Zillow, open house, referral...') : '') +
       textareaField('Notes', 'cf-notes', esc(d.notes || ''), 'Anything worth remembering') +
       '<div class="crm-actions"><button class="crm-btn" id="cancel-add-contact">Cancel</button><button class="crm-btn crm-btn-primary" id="save-add-contact">Save contact</button></div>' +
       '</div></div>';
@@ -358,17 +362,18 @@
   }
 
   function renderEditContactModal(c) {
-    const d = state.editContactDraft || { firstName: c.firstName, lastName: c.lastName, tag: c.tag, phone: c.phone, method: c.method, callbackDate: c.callbackDate, callbackTime: c.callbackTime || '', source: c.source || '', notes: c.notes || '' };
+    const d = state.editContactDraft || { firstName: c.firstName, lastName: c.lastName, tag: c.tag, phone: c.phone, email: c.email || '', method: c.method, callbackDate: c.callbackDate, callbackTime: c.callbackTime || '', source: c.source || '', notes: c.notes || '' };
     return '<div class="crm-overlay"><div class="crm-modal">' +
       '<div class="crm-modal-header"><h3>Edit contact</h3><button class="crm-close" id="close-edit-contact">&times;</button></div>' +
       field('First name', 'text', 'ec-first', esc(d.firstName || ''), 'Jamie') +
       field('Last name', 'text', 'ec-last', esc(d.lastName || ''), 'Rivera') +
       selectField('Tag', 'ec-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
       field('Phone number', 'tel', 'ec-phone', esc(formatPhoneDisplay(d.phone || '')), '443-714-5281') +
+      field('Email (optional)', 'email', 'ec-email', esc(d.email || ''), 'jamie@email.com') +
       selectField('Contact by', 'ec-method', d.method, METHOD_OPTIONS) +
       field('Callback date', 'date', 'ec-date', d.callbackDate, '') +
       field('Time (optional)', 'time', 'ec-time', d.callbackTime || '', '') +
-      (d.tag === 'client' ? field('Source', 'text', 'ec-source', esc(d.source || ''), 'Zillow, open house, past client...') : '') +
+      ((d.tag === 'client' || d.tag === 'realtor') ? field('Source', 'text', 'ec-source', esc(d.source || ''), 'Zillow, open house, referral...') : '') +
       textareaField('Notes', 'ec-notes', esc(d.notes || ''), 'Anything worth remembering') +
       '<div class="crm-actions"><button class="crm-btn" id="delete-edit-contact" style="color:#a32d2d">Delete</button><button class="crm-btn crm-btn-primary" id="save-edit-contact">Save</button></div>' +
       '</div></div>';
@@ -404,6 +409,7 @@
       lastName: document.getElementById('cf-last').value,
       tag: document.getElementById('cf-tag').value,
       phone: document.getElementById('cf-phone').value,
+      email: document.getElementById('cf-email').value,
       method: document.getElementById('cf-method').value,
       callbackDate: document.getElementById('cf-date').value,
       callbackTime: document.getElementById('cf-time').value,
@@ -419,6 +425,7 @@
       lastName: document.getElementById('ec-last').value,
       tag: document.getElementById('ec-tag').value,
       phone: document.getElementById('ec-phone').value,
+      email: document.getElementById('ec-email').value,
       method: document.getElementById('ec-method').value,
       callbackDate: document.getElementById('ec-date').value,
       callbackTime: document.getElementById('ec-time').value,
@@ -428,10 +435,10 @@
   }
 
   function exportContactsCSV() {
-    const headers = ['First Name','Last Name','Tag','Phone','Contact Method','Next Callback Date','Next Callback Time','Source','Notes'];
+    const headers = ['First Name','Last Name','Tag','Phone','Email','Contact Method','Next Callback Date','Next Callback Time','Source','Notes'];
     const rows = state.contacts.map(c => [
       c.firstName || '', c.lastName || '', TAG_LABELS[c.tag] || c.tag || '',
-      formatPhoneDisplay(c.phone), METHOD_LABELS[c.method] || c.method || '',
+      formatPhoneDisplay(c.phone), c.email || '', METHOD_LABELS[c.method] || c.method || '',
       c.callbackDate || '', c.callbackTime || '', c.source || '', c.notes || ''
     ]);
     const csvEscape = v => '"' + String(v).replace(/"/g, '""') + '"';
@@ -492,7 +499,7 @@
       readContactDraft();
       const d = state.contactDraft;
       if (!d.firstName.trim() || !d.phone.trim()) return;
-      state.contacts.push({ id: uid(), firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.method, callbackDate: d.callbackDate || todayStr(), callbackTime: d.callbackTime || '', source: d.tag === 'client' ? (d.source || '').trim() : '', notes: (d.notes || '').trim() });
+      state.contacts.push({ id: uid(), firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), email: (d.email || '').trim(), method: d.method, callbackDate: d.callbackDate || todayStr(), callbackTime: d.callbackTime || '', source: (d.tag === 'client' || d.tag === 'realtor') ? (d.source || '').trim() : '', notes: (d.notes || '').trim() });
       await saveAll();
       state.modal = null; state.contactDraft = null;
       render();
@@ -519,7 +526,7 @@
       if (!d.firstName.trim() || !d.phone.trim() || !d.callbackDate) return;
       const id = state.editContactTarget.id;
       state.contacts = state.contacts.map(c => c.id === id
-        ? { ...c, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.method, callbackDate: d.callbackDate, callbackTime: d.callbackTime || '', source: d.tag === 'client' ? (d.source || '').trim() : '', notes: (d.notes || '').trim() }
+        ? { ...c, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), email: (d.email || '').trim(), method: d.method, callbackDate: d.callbackDate, callbackTime: d.callbackTime || '', source: (d.tag === 'client' || d.tag === 'realtor') ? (d.source || '').trim() : '', notes: (d.notes || '').trim() }
         : c
       );
       await saveAll();
