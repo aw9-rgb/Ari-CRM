@@ -58,6 +58,7 @@
   .crm-actions .crm-btn { flex: 1; }
   .crm-checkbox-row { display: flex; align-items: center; gap: 10px; }
   .crm-checkbox-row input { width: 18px; height: 18px; margin: 0; }
+  .crm-error { color: #c0392b; font-size: 13px; margin-top: 6px; }
   .crm-section-title { font-size: 12px; font-weight: 500; color: #8a8578; text-transform: uppercase; letter-spacing: 0.03em; margin: 1.2rem 0 0.6rem; }
   .crm-loading { text-align: center; padding: 3rem; color: #8a8578; font-size: 14px; }
   .crm-taskrow { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -298,7 +299,7 @@
         html += '<div class="crm-card"><div class="crm-row"><div>' +
           '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + '</div>' +
           '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
-          '<div class="crm-sub">Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') + '</div>' +
+          '<div class="crm-sub">' + (c.callbackDate ? 'Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') : 'No callback scheduled') + '</div>' +
           (c.email ? '<div class="crm-sub">' + esc(c.email) + '</div>' : '') +
           ((c.tag === 'client' || c.tag === 'realtor') && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
           (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
@@ -342,7 +343,7 @@
         html += '<div class="crm-card">' +
           '<div class="crm-name">' + esc(h.firstName) + ' ' + esc(h.lastName) + '</div>' +
           '<div class="crm-sub">' + badge(h.tag) + '<span class="crm-method">Contacted by ' + esc(METHOD_LABELS[h.method]) + '</span></div>' +
-          '<div class="crm-sub">Completed ' + esc(formatDate(h.completedDate)) + ' &middot; next: ' + esc(formatDate(h.nextDate)) + '</div>' +
+          '<div class="crm-sub">Completed ' + esc(formatDate(h.completedDate)) + ' &middot; ' + (h.nextDate ? 'next: ' + esc(formatDate(h.nextDate)) : 'no further contact') + '</div>' +
           '</div>';
       });
     }
@@ -462,17 +463,22 @@
   }
 
   function renderDoneModal(c) {
-    const d = state.doneDraft || { firstName: c.firstName, lastName: c.lastName, tag: c.tag, phone: c.phone, nextMethod: c.method, nextDate: '' };
+    const d = state.doneDraft || { firstName: c.firstName, lastName: c.lastName, tag: c.tag, phone: c.phone, nextMethod: c.method, nextDate: '', noFurther: false };
+    const nextSectionStyle = d.noFurther ? ' style="display:none"' : '';
     return '<div class="crm-overlay"><div class="crm-modal">' +
       '<div class="crm-modal-header"><h3>Confirm and set next callback</h3><button class="crm-close" id="close-done">&times;</button></div>' +
       field('First name', 'text', 'df-first', esc(d.firstName), '') +
       field('Last name', 'text', 'df-last', esc(d.lastName), '') +
       selectField('Tag', 'df-tag', d.tag, [['realtor','Realtor'],['client','Client'],['other','Other']]) +
       field('Phone number', 'tel', 'df-phone', esc(formatPhoneDisplay(d.phone)), '') +
+      '<label class="crm-checkbox-row"><input type="checkbox" id="df-no-further"' + (d.noFurther ? ' checked' : '') + '/><span>No further contact needed</span></label>' +
+      '<div id="df-next-section"' + nextSectionStyle + '>' +
       '<div class="crm-section-title">Next callback</div>' +
       selectField('Contact by', 'df-method', d.nextMethod, METHOD_OPTIONS) +
       field('Date to contact next', 'date', 'df-date', d.nextDate, '') +
       field('Time (optional)', 'time', 'df-time', d.nextTime || '', '') +
+      '</div>' +
+      (d._error ? '<div class="crm-error">' + esc(d._error) + '</div>' : '') +
       '<div class="crm-actions"><button class="crm-btn" id="cancel-done">Cancel</button><button class="crm-btn crm-btn-primary" id="confirm-done">Mark done</button></div>' +
       '</div></div>';
   }
@@ -586,6 +592,7 @@
   }
 
   function readDoneDraft() {
+    const noFurtherEl = document.getElementById('df-no-further');
     state.doneDraft = {
       firstName: document.getElementById('df-first').value,
       lastName: document.getElementById('df-last').value,
@@ -593,7 +600,8 @@
       phone: document.getElementById('df-phone').value,
       nextMethod: document.getElementById('df-method').value,
       nextDate: document.getElementById('df-date').value,
-      nextTime: document.getElementById('df-time').value
+      nextTime: document.getElementById('df-time').value,
+      noFurther: noFurtherEl ? noFurtherEl.checked : false
     };
   }
 
@@ -808,17 +816,24 @@
     if (closeDone) closeDone.onclick = () => { state.modal = null; render(); };
     const cancelDone = document.getElementById('cancel-done');
     if (cancelDone) cancelDone.onclick = () => { state.modal = null; render(); };
+    const noFurtherCheckbox = document.getElementById('df-no-further');
+    if (noFurtherCheckbox) noFurtherCheckbox.onchange = () => { readDoneDraft(); render(); };
     const confirmDone = document.getElementById('confirm-done');
     if (confirmDone) confirmDone.onclick = async () => {
       readDoneDraft();
       const d = state.doneDraft;
       const c = state.doneTarget;
-      if (!d.firstName.trim() || !d.phone.trim() || !d.nextDate) return;
+      if (!d.firstName.trim()) { d._error = 'First name is required.'; render(); return; }
+      if (!d.phone.trim()) { d._error = 'Phone number is required.'; render(); return; }
+      if (!d.noFurther && !d.nextDate) { d._error = 'Set a next callback date, or check "No further contact needed".'; render(); return; }
       state.contacts = state.contacts.map(x => x.id === c.id
-        ? { ...x, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: d.nextMethod, callbackDate: d.nextDate, callbackTime: d.nextTime || '' }
+        ? { ...x, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(),
+            method: d.noFurther ? x.method : d.nextMethod,
+            callbackDate: d.noFurther ? '' : d.nextDate,
+            callbackTime: d.noFurther ? '' : (d.nextTime || '') }
         : x
       );
-      state.history.unshift({ id: uid(), contactId: c.id, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: c.method, completedDate: todayStr(), nextDate: d.nextDate });
+      state.history.unshift({ id: uid(), contactId: c.id, firstName: d.firstName.trim(), lastName: d.lastName.trim(), tag: d.tag, phone: d.phone.trim(), method: c.method, completedDate: todayStr(), nextDate: d.noFurther ? '' : d.nextDate });
       await saveAll();
       state.modal = null; state.doneTarget = null;
       render();
