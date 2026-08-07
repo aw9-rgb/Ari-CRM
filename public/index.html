@@ -64,6 +64,7 @@
   .crm-taskrow { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   .crm-taskrow input[type=text] { flex: 1; min-width: 120px; padding: 9px 10px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 16px; }
   .crm-taskrow input[type=date] { padding: 9px 6px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 16px; }
+  .crm-taskrow input[type=time] { padding: 9px 6px; border: 1px solid #cfc9ba; border-radius: 8px; font-size: 16px; }
   .crm-filters { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .crm-banner { background: #eaf3de; color: #27500a; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .crm-banner button { white-space: nowrap; }
@@ -201,15 +202,7 @@
     return outputArray;
   }
 
-  function render() {
-    const active = document.activeElement;
-    const activeId = active && active.id;
-    const activeSelStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
-    const root = document.getElementById('crm-root');
-    const today = todayStr();
-    const dueToday = state.contacts.filter(c => c.callbackDate && c.callbackDate <= today).sort((a,b) => (a.callbackTime||'99:99').localeCompare(b.callbackTime||'99:99'));
-    const taskDueToday = state.tasks.filter(t => !t.done && (!t.date || t.date <= today)).sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99'));
-    const doneTasks = state.tasks.filter(t => t.done);
+  function getSortedFilteredContacts() {
     const tagFiltered = state.filterTag === 'all' ? state.contacts : state.contacts.filter(c => c.tag === state.filterTag);
     const searchQuery = (state.contactSearch || '').trim().toLowerCase();
     const filteredContacts = !searchQuery ? tagFiltered : tagFiltered.filter(c => {
@@ -220,7 +213,48 @@
       const notes = (c.notes || '').toLowerCase();
       return name.includes(searchQuery) || (queryDigits && phoneDigits.includes(queryDigits)) || email.includes(searchQuery) || notes.includes(searchQuery);
     });
-    const sortedContacts = filteredContacts.slice().sort((a,b) => (a.firstName+a.lastName).localeCompare(b.firstName+b.lastName));
+    return filteredContacts.slice().sort((a,b) => (a.firstName+a.lastName).localeCompare(b.firstName+b.lastName));
+  }
+
+  function renderContactCards(list) {
+    let html = '';
+    if (list.length === 0) html += '<div class="crm-empty">No contacts yet. Add your first one above.</div>';
+    list.forEach(c => {
+      html += '<div class="crm-card"><div class="crm-row"><div>' +
+        '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + '</div>' +
+        '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
+        '<div class="crm-sub">' + (c.callbackDate ? 'Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') : 'No callback scheduled') + '</div>' +
+        (c.email ? '<div class="crm-sub">' + esc(c.email) + '</div>' : '') +
+        ((c.tag === 'client' || c.tag === 'realtor') && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
+        (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
+        '</div><button class="crm-btn" data-edit-contact="' + c.id + '">Edit</button></div></div>';
+    });
+    return html;
+  }
+
+  function updateContactsList() {
+    const wrap = document.getElementById('contacts-list');
+    if (!wrap) { render(); return; }
+    wrap.innerHTML = renderContactCards(getSortedFilteredContacts());
+    document.querySelectorAll('[data-edit-contact]').forEach(el => el.onclick = () => {
+      const id = el.getAttribute('data-edit-contact');
+      state.editContactTarget = state.contacts.find(c => c.id === id);
+      state.editContactDraft = null;
+      state.modal = 'edit-contact';
+      render();
+    });
+  }
+
+  function render() {
+    const active = document.activeElement;
+    const activeId = active && active.id;
+    const activeSelStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+    const root = document.getElementById('crm-root');
+    const today = todayStr();
+    const dueToday = state.contacts.filter(c => c.callbackDate && c.callbackDate <= today).sort((a,b) => (a.callbackTime||'99:99').localeCompare(b.callbackTime||'99:99'));
+    const taskDueToday = state.tasks.filter(t => !t.done && (!t.date || t.date <= today)).sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99'));
+    const doneTasks = state.tasks.filter(t => t.done);
+    const sortedContacts = getSortedFilteredContacts();
 
     let html = '<div class="crm-tabs">';
     ['today','pipeline','contacts','calendar','links','history'].forEach(t => {
@@ -294,17 +328,7 @@
         html += '<button class="crm-btn" data-filter="' + tg + '" style="' + (active ? 'background:#1a5fb4;color:#fff;border-color:#1a5fb4' : '') + '">' + (tg === 'all' ? 'All' : TAG_LABELS[tg]) + '</button>';
       });
       html += '</div>';
-      if (sortedContacts.length === 0) html += '<div class="crm-empty">No contacts yet. Add your first one above.</div>';
-      sortedContacts.forEach(c => {
-        html += '<div class="crm-card"><div class="crm-row"><div>' +
-          '<div class="crm-name">' + esc(c.firstName) + ' ' + esc(c.lastName) + '</div>' +
-          '<div class="crm-sub">' + badge(c.tag) + '<span class="crm-method">' + esc(METHOD_LABELS[c.method]) + ' &middot; ' + esc(formatPhoneDisplay(c.phone)) + '</span></div>' +
-          '<div class="crm-sub">' + (c.callbackDate ? 'Next callback: ' + esc(formatDate(c.callbackDate)) + (c.callbackTime ? ' at ' + esc(formatTime(c.callbackTime)) : '') : 'No callback scheduled') + '</div>' +
-          (c.email ? '<div class="crm-sub">' + esc(c.email) + '</div>' : '') +
-          ((c.tag === 'client' || c.tag === 'realtor') && c.source ? '<div class="crm-sub">Source: ' + esc(c.source) + '</div>' : '') +
-          (c.notes ? '<div class="crm-sub">' + esc(c.notes) + '</div>' : '') +
-          '</div><button class="crm-btn" data-edit-contact="' + c.id + '">Edit</button></div></div>';
-      });
+      html += '<div id="contacts-list">' + renderContactCards(sortedContacts) + '</div>';
     }
 
     if (state.tab === 'calendar') {
@@ -660,7 +684,7 @@
     document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { state.tab = el.getAttribute('data-tab'); render(); });
     document.querySelectorAll('[data-filter]').forEach(el => el.onclick = () => { state.filterTag = el.getAttribute('data-filter'); render(); });
     const contactSearchInput = document.getElementById('contact-search');
-    if (contactSearchInput) contactSearchInput.oninput = () => { state.contactSearch = contactSearchInput.value; render(); };
+    if (contactSearchInput) contactSearchInput.oninput = () => { state.contactSearch = contactSearchInput.value; updateContactsList(); };
 
     const enableBtn = document.getElementById('enable-notif-btn');
     if (enableBtn) enableBtn.onclick = enableNotifications;
